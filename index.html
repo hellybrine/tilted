@@ -125,8 +125,7 @@
   const openProfile = (profile) => {
     const url = new URL(window.location.href);
     url.searchParams.set('profile', profile);
-    const target = CONFIG.openLinksInNewTab ? '_blank' : '_self';
-    window.open(url.toString(), target, 'noopener noreferrer');
+    window.location.assign(url.toString());
   };
 
   document.addEventListener(
@@ -312,6 +311,7 @@
       justify-content: center;
       list-style: none;
       margin: 1rem 0 0;
+      min-height: 3rem;
       overflow: hidden;
       padding: 0;
     }
