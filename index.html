@@ -118,6 +118,7 @@
     ['x/n8n', { url: 'https://n8n.xvyz.co/home/workflows' }],
     ['y', { name: 'YouTube', searchTemplate: '/results?search_query={}', suggestions: ['y/youtube'], url: 'https://www.youtube.com/feed/subscriptions' }],
     ['y/youtube', { url: 'https://www.youtube.com/feed/subscriptions' }],
+    ['/yt', { searchTemplate: '/results?search_query={}', url: 'https://www.youtube.com' }],
     ['0', { name: 'localhost', suggestions: ['0/localhost'], url: 'http://localhost:3000' }],
     ['0/localhost', { url: 'http://localhost:3000' }],
   ]);
@@ -151,6 +152,7 @@
     ['w/wiz', { url: 'https://app.wiz.io' }],
     ['z', { name: 'Zoom', suggestions: ['z/zoom'], url: 'https://app.zoom.us/wc/home' }],
     ['z/zoom', { url: 'https://app.zoom.us/wc/home' }],
+    ['/yt', { searchTemplate: '/results?search_query={}', url: 'https://www.youtube.com' }],
   ]);
 
   let COMMANDS = ACTIVE_PROFILE === 'work' ? WORK_COMMANDS : BASE_COMMANDS;
