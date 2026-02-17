@@ -60,7 +60,7 @@
   };
 
   const PROFILE = new URLSearchParams(window.location.search).get('profile');
-  const ACTIVE_PROFILE = PROFILE === 'work' ? 'work' : 'personal';
+  let ACTIVE_PROFILE = PROFILE === 'work' ? 'work' : 'personal';
   document.documentElement.dataset.profile = ACTIVE_PROFILE;
   document.title = ACTIVE_PROFILE === 'work' ? '~ work' : '~ personal';
 
@@ -152,12 +152,37 @@
     ['z/zoom', { url: 'https://app.zoom.us/wc/home' }],
   ]);
 
-  const COMMANDS = ACTIVE_PROFILE === 'work' ? WORK_COMMANDS : BASE_COMMANDS;
+  let COMMANDS = ACTIVE_PROFILE === 'work' ? WORK_COMMANDS : BASE_COMMANDS;
+
+  const setActiveProfile = (profile, options = {}) => {
+    const nextProfile = profile === 'work' ? 'work' : 'personal';
+    const { animate = true } = options;
+    if (nextProfile === ACTIVE_PROFILE) return;
+    const previousProfile = ACTIVE_PROFILE;
+    const previousCommands = COMMANDS;
+    ACTIVE_PROFILE = nextProfile;
+    COMMANDS = ACTIVE_PROFILE === 'work' ? WORK_COMMANDS : BASE_COMMANDS;
+    document.documentElement.dataset.profile = ACTIVE_PROFILE;
+    document.title = ACTIVE_PROFILE === 'work' ? '~ work' : '~ personal';
+    window.dispatchEvent(
+      new CustomEvent('profilechange', {
+        detail: {
+          animate,
+          nextCommands: COMMANDS,
+          nextProfile: ACTIVE_PROFILE,
+          previousCommands,
+          previousProfile,
+        },
+      })
+    );
+  };
 
   const openProfile = (profile) => {
     const url = new URL(window.location.href);
-    url.searchParams.set('profile', profile);
-    window.location.assign(url.toString());
+    if (profile === 'work') url.searchParams.set('profile', 'work');
+    else url.searchParams.delete('profile');
+    window.history.replaceState({}, '', url);
+    setActiveProfile(profile, { animate: true });
   };
 
   document.addEventListener(
@@ -216,7 +241,22 @@
       position: relative;
       text-align: center;
       text-decoration: none;
+      transition:
+        color var(--transition-speed),
+        opacity 220ms ease,
+        transform 220ms ease;
       width: 4em;
+    }
+
+    .command.enter {
+      opacity: 0;
+      transform: translateY(0.45em) scale(0.94);
+    }
+
+    .command.exit {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-0.4em) scale(0.9);
     }
 
     .key {
@@ -265,26 +305,78 @@
 
 <script type="module">
   class Commands extends HTMLElement {
+    #commands;
+    #commandTemplate;
+    #entries = new Map();
+
     constructor() {
       super();
       this.attachShadow({ mode: 'open' });
       const template = document.getElementById('commands-template');
       const clone = template.content.cloneNode(true);
-      const commands = clone.querySelector('.commands');
-      const commandTemplate = document.getElementById('command-template');
-
-      for (const [key, { name, url }] of COMMANDS.entries()) {
-        if (!name || !url) continue;
-        const clone = commandTemplate.content.cloneNode(true);
-        const command = clone.querySelector('.command');
-        command.href = url;
-        if (CONFIG.openLinksInNewTab) command.target = '_blank';
-        clone.querySelector('.key').innerText = key;
-        clone.querySelector('.name').innerText = name;
-        commands.append(clone);
-      }
+      this.#commands = clone.querySelector('.commands');
+      this.#commandTemplate = document.getElementById('command-template');
+      this.#render(COMMANDS, false);
+      window.addEventListener('profilechange', this.#onProfileChange);
 
       this.shadowRoot.append(clone);
+    }
+
+    disconnectedCallback() {
+      window.removeEventListener('profilechange', this.#onProfileChange);
+    }
+
+    #onProfileChange = (event) => {
+      this.#render(event.detail.nextCommands, event.detail.animate);
+    };
+
+    #setCommandElement(command, key, name, url) {
+      command.href = url;
+      if (CONFIG.openLinksInNewTab) command.target = '_blank';
+      else command.removeAttribute('target');
+      command.querySelector('.key').innerText = key;
+      command.querySelector('.name').innerText = name;
+    }
+
+    #render(nextCommands, animate) {
+      const nextEntries = Array.from(nextCommands.entries()).filter(
+        ([, value]) => value?.name && value?.url
+      );
+      const nextKeys = new Set(nextEntries.map(([key]) => key));
+
+      for (const [key, item] of this.#entries) {
+        if (nextKeys.has(key)) continue;
+        const command = item.querySelector('.command');
+        if (animate) {
+          command.classList.add('exit');
+          setTimeout(() => item.remove(), 220);
+        } else {
+          item.remove();
+        }
+        this.#entries.delete(key);
+      }
+
+      for (const [key, { name, url }] of nextEntries) {
+        let item = this.#entries.get(key);
+        if (!item) {
+          const clone = this.#commandTemplate.content.cloneNode(true);
+          item = clone.querySelector('li');
+          this.#entries.set(key, item);
+          const command = item.querySelector('.command');
+          this.#setCommandElement(command, key, name, url);
+          if (animate) {
+            command.classList.add('enter');
+            requestAnimationFrame(() => command.classList.remove('enter'));
+          }
+        } else {
+          this.#setCommandElement(item.querySelector('.command'), key, name, url);
+        }
+      }
+
+      for (const [key] of nextEntries) {
+        const item = this.#entries.get(key);
+        if (item) this.#commands.append(item);
+      }
     }
   }
 
@@ -462,8 +554,22 @@
       return template.replace(/{}/g, encodeURIComponent(search));
     }
 
+    static #parseDirectUrl(query) {
+      if (!/^https?:\/\//i.test(query)) return null;
+
+      try {
+        const url = new URL(query);
+        if (!url.hostname) return null;
+        return url.toString();
+      } catch {
+        return null;
+      }
+    }
+
     static #parseQuery = (raw) => {
       const query = raw.trim();
+      const directUrl = Search.#parseDirectUrl(query);
+      if (directUrl) return { query, url: directUrl };
 
       if (COMMANDS.has(query)) {
         const { url } = COMMANDS.get(query);
@@ -683,10 +789,10 @@
       #030303 0%,
       #0d0716 32%,
       #2a124c 62%,
-      #43206f 100%
+      #331633 100%
     );
     background-size: 260% 260%;
-    animation: work-background-flow 18s ease infinite;
+    animation: work-background-flow 25s ease infinite;
   }
 
   body {
