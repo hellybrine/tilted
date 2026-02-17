@@ -291,7 +291,7 @@
 
     @media (min-width: 60rem) {
       .commands {
-        grid-template-columns: repeat(11, 1fr);
+        grid-template-columns: repeat(var(--desktop-command-columns, 11), 1fr);
       }
     }
   </style>
@@ -344,10 +344,20 @@
       command.querySelector('.name').innerText = name;
     }
 
+    #setDesktopColumns(commandCount) {
+      const columns =
+        commandCount <= 11 ? commandCount : Math.ceil(commandCount / 2);
+      this.#commands.style.setProperty(
+        '--desktop-command-columns',
+        String(Math.max(1, columns))
+      );
+    }
+
     #render(nextCommands, animate) {
       const nextEntries = Array.from(nextCommands.entries()).filter(
         ([, value]) => value?.name && value?.url
       );
+      this.#setDesktopColumns(nextEntries.length);
       const nextKeys = new Set(nextEntries.map(([key]) => key));
 
       for (const [key, item] of this.#entries) {
