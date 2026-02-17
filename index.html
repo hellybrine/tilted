@@ -544,7 +544,7 @@
 
 <style>
   .date-time {
-    color: var(--color-text);
+    color: #888888;
     display: grid;
     gap: 0.15rem;
     left: 1.25rem;
@@ -557,7 +557,6 @@
 
   .date-time .time {
     font-size: 1rem;
-    font-weight: 700;
   }
 
   .date-time .date {
@@ -589,13 +588,10 @@
     hour: '2-digit',
     hour12: false,
     minute: '2-digit',
-    second: '2-digit',
   });
   const dateFormatter = new Intl.DateTimeFormat([], {
     day: '2-digit',
-    month: 'short',
-    weekday: 'short',
-    year: 'numeric',
+    month: 'long',
   });
 
   const updateDateTime = () => {
