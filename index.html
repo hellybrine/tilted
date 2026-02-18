@@ -60,8 +60,11 @@
   };
   const COMMAND_ANIMATION_MS = 260;
 
-  const PROFILE = new URLSearchParams(window.location.search).get('profile');
-  let ACTIVE_PROFILE = PROFILE === 'work' ? 'work' : 'personal';
+  const PROFILE_STORAGE_KEY = 'tilde-profile';
+  const PROFILE_PARAM = new URLSearchParams(window.location.search).get('profile');
+  const STORED_PROFILE = localStorage.getItem(PROFILE_STORAGE_KEY);
+  let ACTIVE_PROFILE = PROFILE_PARAM === 'work' || (!PROFILE_PARAM && STORED_PROFILE === 'work') ? 'work' : 'personal';
+  localStorage.setItem(PROFILE_STORAGE_KEY, ACTIVE_PROFILE);
   document.documentElement.dataset.profile = ACTIVE_PROFILE;
   document.title = ACTIVE_PROFILE === 'work' ? '~ work' : '~ personal';
 
@@ -84,6 +87,7 @@
     ['f/figma', { url: 'https://www.figma.com' }],
     ['g', { name: 'GitHub', searchTemplate: '/search?q={}', suggestions: ['g/github', 'g/copilot', 'g/trending'], url: 'https://github.com' }],
     ['g/github', { url: 'https://github.com' }],
+    ['gpt', { url: 'https://chatgpt.com/' }],
     ['h', { name: 'Homelab', suggestions: ['h/homelab'], url: 'https://raslab.homes' }],
     ['h/homelab', { url: 'https://raslab.homes' }],
     ['i', { name: 'InstantDB', suggestions: ['i/instantdb'], url: 'https://instantdb.com/dash' }],
@@ -119,6 +123,10 @@
     ['y', { name: 'YouTube', searchTemplate: '/results?search_query={}', suggestions: ['y/youtube'], url: 'https://www.youtube.com/feed/subscriptions' }],
     ['y/youtube', { url: 'https://www.youtube.com/feed/subscriptions' }],
     ['/yt', { searchTemplate: '/results?search_query={}', url: 'https://www.youtube.com' }],
+    ['/r', { searchTemplate: '/search/?q={}', url: 'https://www.reddit.com' }],
+    ['/hn', { searchTemplate: '/?q={}', url: 'https://hn.algolia.com' }],
+    ['/sh', { searchTemplate: '/search?query={}', url: 'https://www.shodan.io' }],
+    ['/vt', { searchTemplate: '/gui/search/{}', url: 'https://www.virustotal.com' }],
     ['0', { name: 'localhost', suggestions: ['0/localhost'], url: 'http://localhost:3000' }],
     ['0/localhost', { url: 'http://localhost:3000' }],
   ]);
@@ -153,6 +161,10 @@
     ['z', { name: 'Zoom', suggestions: ['z/zoom'], url: 'https://app.zoom.us/wc/home' }],
     ['z/zoom', { url: 'https://app.zoom.us/wc/home' }],
     ['/yt', { searchTemplate: '/results?search_query={}', url: 'https://www.youtube.com' }],
+    ['/r', { searchTemplate: '/search/?q={}', url: 'https://www.reddit.com' }],
+    ['/hn', { searchTemplate: '/?q={}', url: 'https://hn.algolia.com' }],
+    ['/sh', { searchTemplate: '/search?query={}', url: 'https://www.shodan.io' }],
+    ['/vt', { searchTemplate: '/gui/search/{}', url: 'https://www.virustotal.com' }],
   ]);
 
   let COMMANDS = ACTIVE_PROFILE === 'work' ? WORK_COMMANDS : BASE_COMMANDS;
@@ -165,6 +177,7 @@
     const previousCommands = COMMANDS;
     ACTIVE_PROFILE = nextProfile;
     COMMANDS = ACTIVE_PROFILE === 'work' ? WORK_COMMANDS : BASE_COMMANDS;
+    localStorage.setItem(PROFILE_STORAGE_KEY, ACTIVE_PROFILE);
     document.documentElement.dataset.profile = ACTIVE_PROFILE;
     document.title = ACTIVE_PROFILE === 'work' ? '~ work' : '~ personal';
     window.dispatchEvent(
@@ -527,6 +540,7 @@
 
 <script type="module">
   class Search extends HTMLElement {
+    #debounceTimer;
     #dialog;
     #form;
     #input;
@@ -664,7 +678,7 @@
       else this.#input.focus();
     }
 
-    #onInput = async () => {
+    #onInput = () => {
       const oq = Search.#parseQuery(this.#input.value);
 
       if (!oq.query) {
@@ -672,26 +686,31 @@
         return;
       }
 
-      let suggestions = COMMANDS.get(oq.query)?.suggestions ?? [];
+      const localSuggestions = COMMANDS.get(oq.query)?.suggestions ?? [];
+      this.#renderSuggestions(localSuggestions, oq.query);
+
+      clearTimeout(this.#debounceTimer);
 
       if (
         oq.search?.length > 1 &&
-        suggestions.length < CONFIG.suggestionLimit
+        localSuggestions.length < CONFIG.suggestionLimit
       ) {
-        const res = await Search.#fetchGoogleSuggestions(oq.search);
+        this.#debounceTimer = setTimeout(async () => {
+          const res = await Search.#fetchGoogleSuggestions(oq.search);
+          const nq = Search.#parseQuery(this.#input.value);
+          if (nq.query !== oq.query) return;
 
-        suggestions = suggestions
-          .concat(
-            oq.splitBy
-              ? res.map((search) => `${oq.key}${oq.splitBy}${search}`)
-              : res
-          )
-          .slice(0, CONFIG.suggestionLimit);
+          const suggestions = localSuggestions
+            .concat(
+              oq.splitBy
+                ? res.map((search) => `${oq.key}${oq.splitBy}${search}`)
+                : res
+            )
+            .slice(0, CONFIG.suggestionLimit);
+
+          this.#renderSuggestions(suggestions, oq.query);
+        }, 150);
       }
-
-      const nq = Search.#parseQuery(this.#input.value);
-      if (nq.query !== oq.query) return;
-      this.#renderSuggestions(suggestions, oq.query);
     };
 
     #onKeydown = (e) => {
@@ -890,6 +909,12 @@
 
   body {
     margin: 0;
+    opacity: 0;
+    transition: opacity 300ms ease;
+  }
+
+  body.ready {
+    opacity: 1;
   }
 </style>
 
@@ -918,7 +943,12 @@
   };
 
   updateDateTime();
-  setInterval(updateDateTime, 1000);
+  const msUntilNextMinute = (60 - new Date().getSeconds()) * 1000;
+  setTimeout(() => {
+    updateDateTime();
+    setInterval(updateDateTime, 60000);
+  }, msUntilNextMinute);
 </script>
 <commands-component></commands-component>
 <search-component></search-component>
+<script>requestAnimationFrame(() => document.body.classList.add('ready'));</script>
