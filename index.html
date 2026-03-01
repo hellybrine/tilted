@@ -144,8 +144,7 @@
     ['/hn', { searchTemplate: '/?q={}', url: 'https://hn.algolia.com' }],
     ['/sh', { searchTemplate: '/search?query={}', url: 'https://www.shodan.io' }],
     ['/vt', { searchTemplate: '/gui/search/{}', url: 'https://www.virustotal.com' }],
-    ['0', { name: 'localhost', suggestions: ['0/localhost'], url: 'http://localhost:3000' }],
-    ['0/localhost', { url: 'http://localhost:3000' }],
+    ['0', { name: 'localhost', pathTemplate: 'http://localhost:{}', suggestions: ['0/3000', '0/5173', '0/8080', '0/4000'], url: 'http://localhost:3000' }],
   ]);
 
   // prettier-ignore
@@ -668,7 +667,9 @@
       if (pathKey && COMMANDS.has(pathKey)) {
         const command = COMMANDS.get(pathKey);
         const baseUrl = getRedirectUrl(pathKey) || command.url;
-        const url = `${new URL(baseUrl).origin}/${path}`;
+        const url = command.pathTemplate
+          ? Search.#formatSearchUrl(command.pathTemplate, path)
+          : `${new URL(baseUrl).origin}/${path}`;
         return { key: pathKey, path, query, splitBy, url };
       }
 
